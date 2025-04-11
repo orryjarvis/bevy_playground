@@ -1,4 +1,11 @@
 {
     "image": "mcr.microsoft.com/devcontainers/rust:latest",
-    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0"
+    "runArgs": [
+        "--device=/dev/dri",
+        "--env=WAYLAND_DISPLAY",
+        "--env=XDG_RUNTIME_DIR",
+        "--env=WINIT_UNIX_BACKEND=wayland",
+        "--volume=${env:XDG_RUNTIME_DIR}:${env:XDG_RUNTIME_DIR}"
+    ],
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y g++ pkg-config libx11-dev libx11-xcb-dev libasound2-dev libudev-dev libxkbcommon-x11-0 libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev mesa-vulkan-drivers lld clang"
 }
