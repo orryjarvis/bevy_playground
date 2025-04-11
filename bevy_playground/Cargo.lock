@@ -887,6 +887,10 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_input",
+ "console_error_panic_hook",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
