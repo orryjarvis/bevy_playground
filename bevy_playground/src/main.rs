@@ -1,50 +1,63 @@
 use bevy::prelude::*;
 
+// Component to mark our shape
 #[derive(Component)]
-struct Person;
+struct Player;
 
-#[derive(Component)]
-struct Name(String);
-
-fn add_people(mut commands: Commands) {
-    commands.spawn((Person, Name("Elaina Proctor".to_string())));
-    commands.spawn((Person, Name("Renzo Hume".to_string())));
-    commands.spawn((Person, Name("Zayna Nieves".to_string())));
-}
-#[derive(Resource)]
-struct GreetTimer(Timer);
-
-fn greet_people(time: Res<Time>, mut timer: ResMut<GreetTimer>, query: Query<&Name, With<Person>>) {
-    // update our timer with the time elapsed since the last update
-    // if that caused the timer to finish, we say hello to everyone
-    if timer.0.tick(time.delta()).just_finished() {
-        for name in &query {
-            println!("hello {}!", name.0);
-        }
-    }
+// System to spawn a shape
+fn setup(mut commands: Commands) {
+    // Add a 2D camera
+    commands.spawn(Camera2d);
+    
+    // Spawn a blue square
+    commands.spawn((
+        Player,
+        Sprite {
+            color: Color::srgb(0.5, 0.5, 1.0),
+            custom_size: Some(Vec2::new(50.0, 50.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
 }
 
-fn update_people(mut query: Query<&mut Name, With<Person>>) {
-    for mut name in &mut query {
-        if name.0 == "Elaina Proctor" {
-            name.0 = "Elaina Hume".to_string();
-            break; // We don't need to change any other names.
-        }
+// System to handle keyboard input and move the shape
+fn player_movement(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mut query: Query<&mut Transform, With<Player>>,
+) {
+    let mut player_transform = query.single_mut();
+    let mut direction = Vec3::ZERO;
+    
+    // Get input direction
+    if keyboard.pressed(KeyCode::ArrowUp) || keyboard.pressed(KeyCode::KeyW) {
+        direction.y += 1.0;
     }
-}
-
-pub struct HelloPlugin;
-impl Plugin for HelloPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)));
-        app.add_systems(Startup, add_people);
-        app.add_systems(Update, (update_people, greet_people).chain());
+    if keyboard.pressed(KeyCode::ArrowDown) || keyboard.pressed(KeyCode::KeyS) {
+        direction.y -= 1.0;
     }
+    if keyboard.pressed(KeyCode::ArrowRight) || keyboard.pressed(KeyCode::KeyD) {
+        direction.x += 1.0;
+    }
+    if keyboard.pressed(KeyCode::ArrowLeft) || keyboard.pressed(KeyCode::KeyA) {
+        direction.x -= 1.0;
+    }
+    
+    // Normalize direction to prevent faster diagonal movement
+    if direction != Vec3::ZERO {
+        direction = direction.normalize();
+    }
+    
+    // Move the player
+    let speed = 300.0;
+    player_transform.translation += direction * speed * time.delta_secs();
 }
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(HelloPlugin)
+        .add_systems(Startup, setup)
+        .add_systems(Update, player_movement)
         .run();
 }
