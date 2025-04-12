@@ -74,15 +74,3 @@ pub fn run() {
     
     app.run();
 }
-
-// This section enables wasm bindgen for the web build
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub fn start() {
-    // When building for WASM, print panics to the browser console
-    console_error_panic_hook::set_once();
-    run();
-}
