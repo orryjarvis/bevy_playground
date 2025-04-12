@@ -1,106 +1,158 @@
-# System Patterns: Bevy Playground
+# System Patterns: WebAssembly Multiplayer Game
 
 ## Architecture Overview
-The Bevy Playground is built on the Bevy game engine, which uses an Entity Component System (ECS) architecture. This document outlines the key architectural patterns and design decisions used in the project.
+This project implements a multiplayer game architecture optimized for WebAssembly deployment, built on the Bevy game engine. The architecture emphasizes network-aware design patterns, efficient state synchronization, and browser-optimized performance.
+
+## Core Architecture Layers
+
+### 1. Client Layer (WebAssembly)
+- **Browser Integration**: WebAssembly initialization and JavaScript interop
+- **Input Processing**: User input capture and validation
+- **State Management**: Client-side prediction and reconciliation
+- **Rendering**: Efficient WebGL/WebGPU rendering through Bevy
+- **Asset Management**: Dynamic loading and caching strategies
+
+### 2. Network Layer
+- **State Synchronization**: Delta compression and efficient state updates
+- **Prediction Systems**: Client-side prediction and server reconciliation
+- **Latency Compensation**: Input buffering and interpolation
+- **Connection Management**: WebSocket handling and connection recovery
+
+### 3. Server Layer (Future Implementation)
+- **Authority State**: Source of truth for game state
+- **Physics Simulation**: Authoritative movement and collision
+- **Session Management**: Player sessions and game instances
+- **State Broadcasting**: Efficient state updates to clients
 
 ## ECS Architecture
-The Entity Component System (ECS) is a software architectural pattern that follows composition over inheritance and is used extensively in game development:
 
-1. **Entities**: Unique identifiers that represent game objects
-2. **Components**: Data attached to entities (e.g., position, velocity, health)
-3. **Systems**: Logic that operates on entities with specific components
-4. **Resources**: Global data accessible by systems
-
-### Current Implementation
-The current implementation demonstrates basic ECS concepts:
-- **Entities**: Created in the `add_people` system
-- **Components**: `Person` (marker) and `Name` (data)
-- **Systems**: `add_people`, `greet_people`, and `update_people`
-- **Resources**: `GreetTimer` for periodic actions
-- **Plugin**: `HelloPlugin` for organizing systems and resources
-
-## Design Patterns
-
-### Plugin Pattern
-The project uses Bevy's plugin system to organize functionality:
+### Component Design
+Components are designed for network efficiency:
 ```rust
-pub struct HelloPlugin;
-impl Plugin for HelloPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)));
-        app.add_systems(Startup, add_people);
-        app.add_systems(Update, (update_people, greet_people).chain());
-    }
+// Network-aware transform component
+#[derive(Component, Serialize, Deserialize)]
+struct NetTransform {
+    position: Vec3,
+    rotation: Quat,
+    interpolation_target: Option<Vec3>,
+    last_update: f32,
+}
+
+// Player state component
+#[derive(Component, Serialize, Deserialize)]
+struct PlayerState {
+    input_sequence: u32,
+    last_processed_input: u32,
+    predicted_position: Vec3,
 }
 ```
 
-This pattern allows for:
-- Modular organization of game features
-- Clean separation of concerns
-- Easy enabling/disabling of functionality
-- Reusable components across projects
+### System Organization
+Systems are organized by responsibility and execution timing:
 
-### System Scheduling
-Systems are scheduled to run at specific times:
-- **Startup**: Systems that run once when the app starts (e.g., `add_people`)
-- **Update**: Systems that run every frame (e.g., `greet_people`, `update_people`)
+1. **Input Systems**
+   - Input collection and validation
+   - Command generation
+   - Input prediction
 
-Systems can also be chained to ensure execution order:
-```rust
-app.add_systems(Update, (update_people, greet_people).chain());
-```
+2. **Network Systems**
+   - State synchronization
+   - Latency compensation
+   - Connection management
 
-### Component Design
-Components are designed to be:
-- **Focused**: Each component has a single responsibility
-- **Composable**: Entities can have multiple components
-- **Data-oriented**: Components store data, not behavior
+3. **Simulation Systems**
+   - Physics update
+   - Game logic
+   - State reconciliation
+
+4. **Presentation Systems**
+   - State interpolation
+   - Visual effects
+   - UI updates
 
 ## Critical Implementation Paths
 
-### Entity Creation
-Entities are created using the `Commands` API:
+### State Synchronization
 ```rust
-fn add_people(mut commands: Commands) {
-    commands.spawn((Person, Name("Elaina Proctor".to_string())));
-    commands.spawn((Person, Name("Renzo Hume".to_string())));
-    commands.spawn((Person, Name("Zayna Nieves".to_string())));
+fn sync_network_state(
+    mut commands: Commands,
+    mut network_state: ResMut<NetworkState>,
+    query: Query<(Entity, &NetTransform, &PlayerState)>,
+) {
+    // State synchronization logic
 }
 ```
 
-### Query System
-Data is accessed using Bevy's query system:
+### Prediction and Reconciliation
 ```rust
-fn greet_people(time: Res<Time>, mut timer: ResMut<GreetTimer>, query: Query<&Name, With<Person>>) {
-    // ...
-    for name in &query {
-        println!("hello {}!", name.0);
-    }
+fn client_prediction(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &PlayerState)>,
+    input: Res<InputBuffer>,
+) {
+    // Client-side prediction implementation
+}
+
+fn server_reconciliation(
+    mut query: Query<(&mut Transform, &mut PlayerState)>,
+    network: Res<NetworkState>,
+) {
+    // Server reconciliation logic
 }
 ```
+
+## Asset Pipeline
+
+### WebAssembly-Optimized Loading
+- Asynchronous asset loading
+- Browser cache integration
+- Format optimization for web delivery
+- Progressive loading strategies
 
 ### Resource Management
-Resources are used for global state:
 ```rust
 #[derive(Resource)]
-struct GreetTimer(Timer);
-
-// Inserting a resource
-app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)));
-
-// Accessing a resource
-fn greet_people(time: Res<Time>, mut timer: ResMut<GreetTimer>, ...) {
-    if timer.0.tick(time.delta()).just_finished() {
-        // ...
-    }
+struct AssetLoadState {
+    loading_tasks: Vec<LoadingTask>,
+    cache_status: HashMap<AssetId, CacheStatus>,
 }
 ```
 
-## Future Architectural Considerations
+## Performance Patterns
 
-As the playground evolves, consider:
-1. **Scene organization**: How to structure multiple experiments/demos
-2. **State management**: Using Bevy's state system for different application states
-3. **Asset management**: Handling textures, models, sounds, etc.
-4. **UI integration**: Adding debug UI for experiment parameters
-5. **Event system**: Using Bevy's event system for decoupled communication
+### Memory Management
+- Careful allocation strategies for WebAssembly
+- Component pooling for frequent operations
+- Efficient serialization for network updates
+
+### State Updates
+- Delta compression for network packets
+- Partial state updates
+- Priority-based update scheduling
+
+### Rendering Optimization
+- View frustum culling
+- LOD system for web performance
+- Batched rendering operations
+
+## Future Considerations
+
+1. **Scalability**
+   - Multiple game instances
+   - Player session management
+   - Server infrastructure
+
+2. **Network Resilience**
+   - Connection recovery
+   - State reconciliation improvements
+   - Anti-cheat measures
+
+3. **Performance Optimization**
+   - WebAssembly optimization
+   - Network protocol efficiency
+   - Asset delivery optimization
+
+4. **Browser Compatibility**
+   - Cross-browser testing
+   - Progressive enhancement
+   - Fallback strategies

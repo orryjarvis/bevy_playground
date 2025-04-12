@@ -1,201 +1,235 @@
-# Technical Context: Bevy Playground
+# Technical Context: WebAssembly Multiplayer Game
 
-## Technologies Used
+## Technology Stack
 
 ### Core Technologies
 - **Rust**: Systems programming language (Edition 2024)
 - **Bevy**: Game engine and ECS framework (v0.15.3)
-- **Cargo**: Rust package manager and build system
-- **WebAssembly (WASM)**: Binary instruction format for a stack-based virtual machine
-- **wasm-bindgen**: Facilitating high-level interactions between Wasm modules and JavaScript
-- **HTML/CSS/JavaScript**: Web technologies for the browser interface
+- **WebAssembly**: Compilation target for browser deployment
+- **WebSocket**: Real-time client-server communication
+- **WebGL/WebGPU**: Graphics rendering in browser
+- **Protocol Buffers**: Efficient network serialization (planned)
+
+### Networking Stack
+- **wasm-bindgen**: WebAssembly/JavaScript interop
+- **web-sys**: Web API bindings
+- **gloo-net**: WebSocket communication
+- **serde**: Serialization/deserialization
+- **bincode**: Binary serialization format
 
 ### Development Environment
 - **VS Code**: Primary IDE with DevContainer support
 - **DevContainer**: Docker-based development environment
   - Base image: `mcr.microsoft.com/devcontainers/rust:latest`
-  - No additional dependencies for native UI support in the container
-  - Browser-only UI support when running in the container
-  - Includes necessary dependencies for headless Chromium/Puppeteer
-  - Configured to install browser dependencies automatically on container creation
+  - Browser-only UI support
+  - Configured for headless testing
 
-### Dependencies
-The project has dependencies focused on the Bevy ecosystem and WASM support:
+## Dependencies
 
+### Client-side Dependencies
 ```toml
 [dependencies]
 bevy = "0.15.3"
-bevy_input = "0.15.3"
-
-# Dependencies for WASM support
-[target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
+gloo-net = { version = "0.2", features = ["websocket"] }
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.3"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = [
     "Document",
     "Window",
     "Element",
     "HtmlCanvasElement",
+    "WebSocket",
+    "MessageEvent",
 ] }
 console_error_panic_hook = "0.1.7"
 ```
 
-The `console_error_panic_hook` dependency is particularly important for WASM builds as it ensures that Rust panics are properly displayed in the browser console, making debugging easier.
-
 ### Build Configuration
-The project uses custom optimization settings and is configured for both native and WASM builds:
-
 ```toml
-# Enable optimization in debug mode
-[profile.dev]
-opt-level = 1
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
 
-# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
 [profile.dev.package."*"]
 opt-level = 3
 
-# Configure the WASM build
 [lib]
 crate-type = ["cdylib", "rlib"]
 ```
 
-This configuration:
-- Applies level 1 optimization to the project code in development mode
-- Applies level 3 optimization to dependencies in development mode
-- Balances build speed with runtime performance for a better development experience
-- Configures the library to be built as both a dynamic library (for WASM) and a Rust library (for native)
+## Technical Architecture
 
-The `cdylib` crate type is essential for WASM builds as it produces a dynamic library without Rust-specific metadata, suitable for use in non-Rust environments like browsers.
+### Client Architecture
+1. **WebAssembly Core**
+   - Game state management
+   - Physics simulation
+   - Input processing
+   - State prediction
 
-## Technical Constraints
+2. **Network Layer**
+   - WebSocket connection management
+   - State synchronization
+   - Latency compensation
+   - Input buffering
 
-### Performance Considerations
-- Bevy is designed for performance, but complex scenes can be resource-intensive
-- Development container may have limited GPU capabilities compared to native
-- Optimization settings help balance development experience with performance
-- WASM performance may differ from native performance, especially for complex scenes
-- Browser-specific limitations may affect WASM performance and capabilities
-- JavaScript garbage collection can cause occasional stutters in WASM applications
+3. **Rendering Pipeline**
+   - WebGL/WebGPU integration
+   - Asset management
+   - Scene graph optimization
+   - Shader compilation
 
-### Platform Support
-- The development environment is configured for Linux with X11/Wayland support
-- Additional configuration would be needed for Windows or macOS development
-- Cross-platform considerations should be kept in mind for any platform-specific code
-- Web version supports any modern browser with WebAssembly support
-- Mobile browsers may have different performance characteristics and input methods
-- Touch input would require additional handling for mobile web support
+### Server Architecture (Planned)
+1. **Game Server**
+   - State authority
+   - Physics simulation
+   - Client session management
+   - State broadcast
 
-### Bevy Version Constraints
-- Using Bevy 0.15.3, which has specific API patterns and features
-- Future Bevy versions may introduce breaking changes
-- Code should follow current Bevy best practices while being adaptable to future changes
-- WASM support in Bevy may evolve over time, requiring updates to the web configuration
-- Bevy's WASM support uses exceptions for control flow, which can appear as errors in the browser console
+2. **Infrastructure**
+   - Load balancing
+   - Session persistence
+   - Monitoring
+   - Scaling
 
 ## Development Setup
 
-### Required System Dependencies
-The development container no longer installs additional dependencies for native UI support. 
-Native UI dependencies are only needed when running outside the container.
-
-
-For WASM development, additional tools are required:
-```
-wasm-bindgen-cli
+### Required Tools
+```bash
+# WebAssembly toolchain
 rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli
+cargo install cargo-watch
+
+# Development tools
+cargo install cargo-audit
+cargo install cargo-deny
 ```
 
-The `wasm-bindgen-cli` tool is essential for generating the JavaScript bindings that allow the browser to interact with the compiled WASM module.
-
-### Running the Project
-
-#### Native Version
-To run the native version:
+### Build Process
 ```bash
-cd bevy_playground
-cargo run
-```
-
-For release builds with better performance:
-```bash
-cargo run --release
-```
-
-#### Web Version
-To build and run the web version:
-```bash
-cd bevy_playground
-# Build the WASM version
+# Development build
 ./web/build.sh
 
-# Serve the web files
-./web/serve.sh
+# Production build
+RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' \
+cargo build --target wasm32-unknown-unknown --release
 ```
-
-Then open a browser and navigate to `http://localhost:8000`.
-
-The build script performs these key steps:
-1. Compiles the Rust code to WASM targeting `wasm32-unknown-unknown`
-2. Processes the WASM file with `wasm-bindgen` to generate JavaScript bindings
-3. Outputs the processed files to the web directory
-
-The serve script starts a Python HTTP server that binds to all interfaces (0.0.0.0), making it accessible from both inside the container and from the host machine. This allows for testing the web version of the game from any browser, whether it's running inside the container or on the host system.
 
 ### Development Workflow
 
-#### Native Development
-1. Make code changes in the `src` directory
-2. Run the application with `cargo run`
-3. Observe output in the window
-4. Iterate on changes
+#### Local Development
+1. Start development server:
+```bash
+./web/serve.sh
+```
 
-#### Web Development
-1. Make code changes in the `src` directory
-2. Build the WASM version with `./web/build.sh`
-3. Serve the files with `./web/serve.sh`
-4. Test in a browser at `http://localhost:8000`
-5. Use browser developer tools to debug any issues
-6. Make changes and repeat the build and test process
-   (Note: The automatic watch/rebuild mode has been removed)
+2. Enable hot reloading:
+```bash
+cargo watch -s "./web/build.sh"
+```
 
-#### Debugging WASM
-1. Open browser developer tools (F12 in most browsers)
-2. Check the Console tab for any error messages
-3. Use the Network tab to verify WASM file loading
-4. Use the Performance tab to identify any performance bottlenecks
+#### Production Deployment
+1. Build optimized WASM:
+```bash
+./web/build.sh --release
+```
 
-## Tool Usage Patterns
+2. Optimize WASM binary:
+```bash
+wasm-opt -O3 -o output.wasm input.wasm
+```
 
-### Cargo Commands
-- `cargo build`: Compile the project
-- `cargo run`: Build and run the project
-- `cargo check`: Check for errors without building
-- `cargo test`: Run tests (when added)
-- `cargo clippy`: Run the Rust linter for code quality checks
-- `cargo build --target wasm32-unknown-unknown`: Build for WASM target
-- Note: cargo-watch is no longer used for development workflow
+### Testing Infrastructure
 
-### WASM Tools
-- `wasm-bindgen`: Generate JavaScript bindings for Rust WASM modules
-- `wasm-bindgen-cli`: Command-line interface for wasm-bindgen
-- Python's HTTP server: For serving the web files locally
+#### Unit Tests
+```bash
+cargo test
+```
 
-### Web Development Tools
-- Browser developer tools (F12): For debugging WASM applications
-- Network inspector: For monitoring WASM file loading
-- Console: For viewing Rust panic messages and other logs
-- Performance profiler: For identifying performance bottlenecks
+#### Integration Tests
+```bash
+wasm-pack test --headless --firefox
+```
 
-### VS Code Integration
-- The project is configured for VS Code with DevContainer support
-- Recommended extensions for Rust development:
-  - rust-analyzer: For code intelligence
-  - CodeLLDB: For debugging
-  - crates: For dependency management
-- Browser developer tools for debugging the web version
+#### Performance Testing
+- Browser Performance API integration
+- Frame timing analysis
+- Network latency monitoring
+- Memory usage tracking
 
-### Git Workflow
-Standard Git workflow with `.gitignore` configured for Rust projects:
-- Ignores `target/` directory with build artifacts
-- Ignores backup files from rustfmt
-- Ignores debugging information files
+## Performance Considerations
+
+### WebAssembly Optimization
+- SIMD operations where available
+- Minimal JavaScript boundary crossing
+- Efficient memory management
+- Careful DOM interaction
+
+### Network Optimization
+- Binary protocol for state updates
+- Delta compression
+- Priority-based updates
+- Bandwidth monitoring
+
+### Memory Management
+- Component pooling
+- Asset streaming
+- Garbage collection coordination
+- Memory defragmentation
+
+## Deployment Strategy
+
+### Build Pipeline
+1. Rust compilation
+2. WASM optimization
+3. Asset processing
+4. CDN distribution
+
+### Hosting Requirements
+- Edge server distribution
+- WebSocket support
+- Static file serving
+- SSL termination
+
+### Monitoring
+- Client performance metrics
+- Network latency tracking
+- Error reporting
+- Usage analytics
+
+## Security Considerations
+
+### Client Security
+- Input validation
+- State verification
+- Anti-cheat measures
+- Secure WebSocket connection
+
+### Server Security (Planned)
+- DDoS protection
+- Rate limiting
+- Session validation
+- State verification
+
+## Future Technical Considerations
+
+1. **WebGPU Migration**
+   - Performance improvements
+   - Modern graphics features
+   - Better cross-platform support
+
+2. **Network Protocol Evolution**
+   - Custom binary protocol
+   - Improved compression
+   - Enhanced prediction
+
+3. **Scale Infrastructure**
+   - Multiple game instances
+   - Regional deployment
+   - Load balancing
+   - State persistence
